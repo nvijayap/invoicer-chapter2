@@ -14,11 +14,13 @@ jobs:
       name: Setup environment
       command: |
        gb="/src/github.com/${CIRCLE_PROJECT_USERNAME}";
+       echo "gb: $gb"
        if [ ${CIRCLE_PROJECT_USERNAME} == 'Securing-DevOps' ]; then
          dr="securingdevops"
        else
          dr=$DOCKER_USER
        fi
+       echo "dr: $dr"
        cat >> $BASH_ENV << EOF
        export GOPATH_HEAD="$(echo ${GOPATH}|cut -d ':' -f 1)"
        export GOPATH_BASE="$(echo ${GOPATH}|cut -d ':' -f 1)${gb}"
@@ -30,19 +32,30 @@ jobs:
    - run:
       name: Testing application
       command: |
+          echo "CIRCLE_PROJECT_USERNAME: $CIRCLE_PROJECT_USERNAME"
+          echo "CIRCLE_PROJECT_REPONAME: CIRCLE_PROJECT_REPONAME"
           go test \
           github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
 
    - deploy:
        command: |
          if [ "${CIRCLE_BRANCH}" == "master" ]; then
+           echo "Inside if block"
            docker login -u ${DOCKER_USER} -p ${DOCKER_PASS};
+           [ $? -eq 0 ] && echo "Successful Login"
            go install --ldflags '-extldflags "-static"' \
            github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME};
+           echo "Making bin ..."
            mkdir bin;
            cp "$GOPATH_HEAD/bin/${CIRCLE_PROJECT_REPONAME}" bin/invoicer;
+           echo "Building ..."
            docker build -t ${DOCKER_REPO}/${CIRCLE_PROJECT_REPONAME} .;
+           echo "Checking ..."
            docker images --no-trunc | awk '/^app/ {print $3}' | \
              sudo tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt;
+           echo "Pushing ..."
            docker push ${DOCKER_REPO}/${CIRCLE_PROJECT_REPONAME};
+           echo "... Done ..."
+         else
+           echo "Branch is not master"
          fi
